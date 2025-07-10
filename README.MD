@@ -1,3 +1,10 @@
+**Pytris Beta 2.0**
+-- Better graphics
+-- Added visuals
+-- Added sfx
+-- Refined controls
+-- Added hold options
+
 Pytris Beta 1.0
 
 2025 Danew Malavita
