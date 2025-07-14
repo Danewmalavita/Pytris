@@ -31,24 +31,6 @@ El juego es compatible con mandos, aunque el teclado se puede editar la asignaci
 
 (*Probablemente será compatible con mandos de nintendo switch, playstation y genericos, si no fuera posible, reportarlo como bug y me pondré manos a la obra.*)
 
-## Cómo usar el editor
-
-Para utilizar Editor Markdown, redacta tu documento usando la sintaxis Markdown en el panel de la izquierda. Puedes ver la representación final HTML en tiempo real en el panel de la derecha.
-
-Actualmente, Editor Markdown es compatible con:
-
-* GitHub
-* Dropbox
-* Bitbucket
-
-Desde Editor Markdown también puedes redactar artículos en Medium.
-
-Actualmente puedes exportar tus archivos a estos formatos:
-
-* PDF
-* HTML
-* Markdown
-
 ## Novedades
 
 Novedades de la última versión:
