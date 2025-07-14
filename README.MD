@@ -1,24 +1,64 @@
-**Pytris Beta 2.0**
--- Better graphics
--- Added visuals
--- Added sfx
--- Refined controls
--- Added hold options
+# Pytris versión 2.0
 
-Pytris Beta 1.0
+Pytris es un juego de tetris creado en python con algún que otro toque de json. Este juego se encuentra aún en modo de desarrollo.
 
-2025 Danew Malavita
+To do List:
+-- Modo 1 jugador (Se añadirán modos de juego historia, time attack, desafío)
+-- Modo 2 jugadores (Se añadirán modo de juego competitivo y VS para entretenimiento a dos jugadores) *Work in progress. 20%*
+-- Optimización a nuevas resoluciones (El juego funciona actualmente en 1280*720p se está buscando que pueda ser ejecutado en 480 y 1080p)
+-- Mejoras sonoras (Se buscarán nuevas canciones)
+-- Logotipo animado y mejoras gráficas *Work in progress. 50%*
 
-This is a simple Tetris game coded in Python.
-IMPORTANT: It requires the pygame library to run. 
+## Funcionalidades
 
-Please install the pygame library before installing it with the command 
-pip install pygame
+### Modo arcade
+El juego cuenta con un modo arcade infinito en el cual se busca obtener la mayor puntuación posible
 
-Exe compiled with pyinstall (Can found it on compile/dist folder)
+### Compatibilidad con mandos
+El juego es compatible con mandos, aunque el teclado se puede editar la asignación de controles. Tenemos un bug conocido en el cual impide bien la asignación de botones en gamepad.
+-- Probado con mando xbox one:
++ Dpad izda y derecha: movimiento
++ Dpad abajo: Softdrop
++ Dpad Arriba/Botón B: Harddrop
++ Botón A: Rotación
++ Botón X: Hold de pieza
++ Botón Start: Pausa
 
-Found minor bugs:
+-- Mandos en menú
++ Dpad arriba y abajo: Navegar por menú
++ Botón A: Aceptar
++ Botón B: Cancelar
 
-1- The mid music doesn't play when toggles on and in game restart (Im working on it!)
-2- When toggles off music and toggles on again, appears the last F of the Word OFF
-3- The cyan piece doesn't watch perfectly on next piece.
+(*Probablemente será compatible con mandos de nintendo switch, playstation y genericos, si no fuera posible, reportarlo como bug y me pondré manos a la obra.*)
+
+## Cómo usar el editor
+
+Para utilizar Editor Markdown, redacta tu documento usando la sintaxis Markdown en el panel de la izquierda. Puedes ver la representación final HTML en tiempo real en el panel de la derecha.
+
+Actualmente, Editor Markdown es compatible con:
+
+* GitHub
+* Dropbox
+* Bitbucket
+
+Desde Editor Markdown también puedes redactar artículos en Medium.
+
+Actualmente puedes exportar tus archivos a estos formatos:
+
+* PDF
+* HTML
+* Markdown
+
+## Novedades
+
+Novedades de la última versión:
+
+* Añadida funcionalidad de gamepad.
+* Añadido mejoras visuales y sonoras.
+* Corregidos bugs importantes
+
+
+2025(c) Danew Malavita Developer
+
+
+
