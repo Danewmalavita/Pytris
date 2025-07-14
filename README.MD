@@ -18,17 +18,17 @@ El juego cuenta con un modo arcade infinito en el cual se busca obtener la mayor
 El juego es compatible con mandos, aunque el teclado se puede editar la asignación de controles. Tenemos un bug conocido en el cual impide bien la asignación de botones en gamepad.
 
 - Probado con mando xbox one:
-++ Dpad izda y derecha: movimiento
-++ Dpad abajo: Softdrop
-++ Dpad Arriba/Botón B: Harddrop
-++ Botón A: Rotación
-++ Botón X: Hold de pieza
-++ Botón Start: Pausa
+  + Dpad izda y derecha: movimiento
+  + Dpad abajo: Softdrop
+  + Dpad Arriba/Botón B: Harddrop
+  + Botón A: Rotación
+  + Botón X: Hold de pieza
+  + Botón Start: Pausa
 
 - Mandos en menú
-++ Dpad arriba y abajo: Navegar por menú
-++ Botón A: Aceptar
-++ Botón B: Cancelar
+  + Dpad arriba y abajo: Navegar por menú
+  + Botón A: Aceptar
+  + Botón B: Cancelar
 
 (*Probablemente será compatible con mandos de nintendo switch, playstation y genericos, si no fuera posible, reportarlo como bug y me pondré manos a la obra.*)
 
