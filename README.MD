@@ -3,11 +3,11 @@
 Pytris es un juego de tetris creado en python con algún que otro toque de json. Este juego se encuentra aún en modo de desarrollo.
 
 To do List:
--- Modo 1 jugador (Se añadirán modos de juego historia, time attack, desafío)
--- Modo 2 jugadores (Se añadirán modo de juego competitivo y VS para entretenimiento a dos jugadores) *Work in progress. 20%*
--- Optimización a nuevas resoluciones (El juego funciona actualmente en 1280*720p se está buscando que pueda ser ejecutado en 480 y 1080p)
--- Mejoras sonoras (Se buscarán nuevas canciones)
--- Logotipo animado y mejoras gráficas *Work in progress. 50%*
++ Modo 1 jugador (Se añadirán modos de juego historia, time attack, desafío)
++ Modo 2 jugadores (Se añadirán modo de juego competitivo y VS para entretenimiento a dos jugadores) *Work in progress. 20%*
++ Optimización a nuevas resoluciones (El juego funciona actualmente en 1280*720p se está buscando que pueda ser ejecutado en 480 y 1080p)
++ Mejoras sonoras (Se buscarán nuevas canciones)
++ Logotipo animado y mejoras gráficas *Work in progress. 50%*
 
 ## Funcionalidades
 
