@@ -152,6 +152,8 @@ SHAPES = [
 # tetris_logic.py (actualizado: corrección completa del bug al eliminar múltiples líneas con animación)
 import pygame
 import random
+import time
+from debug_utils import debugger
 
 # Colores y SHAPES definidos como antes (sin cambios)
 
@@ -169,6 +171,7 @@ class TetrisGame:
         self.combo_count = 0  # Contador de combos consecutivos
         self.last_clear_time = 0  # Para el temporizador de combo
         self.combo_timeout = 5000  # Tiempo en ms para resetear combo (5 segundos)
+        self.level_up_event = False  # Flag to signal a level up event
         self.reset()
 
     def reset(self):
@@ -189,6 +192,7 @@ class TetrisGame:
         self.clear_animation_time = 0
         self.animating_clear = False
         self.combo_count = 0
+        self.level_up_event = False
 
     def refill_bag(self):
         self.bag = list(range(7))
@@ -289,7 +293,10 @@ class TetrisGame:
         current = self.piece_type
         if self.hold_piece_type is None:
             self.piece_type = self.next_piece_type
-            self.next_piece_type = random.randint(0, 6)
+            # Usar el sistema de bolsa para el siguiente tetromino
+            if not self.bag:
+                self.refill_bag()
+            self.next_piece_type = self.bag.pop(0)
         else:
             self.piece_type, self.hold_piece_type = self.hold_piece_type, current
         self.hold_piece_type = current
@@ -353,35 +360,93 @@ class TetrisGame:
         return None
 
     def finish_clear_animation(self):
-        # Ordenar las líneas a eliminar de mayor a menor
-        sorted_lines = sorted(self.lines_to_clear, reverse=True)
-        
-        # Copiar el campo excluyendo las líneas a eliminar
-        new_field = []
-        for y in range(self.height):
-            if y not in self.lines_to_clear:
-                new_field.append(self.field[y].copy())
-        
-        # Añadir las filas vacías al principio
-        empty_rows = len(self.lines_to_clear)
-        for _ in range(empty_rows):
-            new_field.insert(0, [0] * self.width)
-        
-        # Reemplazar el campo completo con la nueva versión
-        self.field = new_field
+        try:
+            start_time = time.time()
+            debugger.debug(f"Starting clear animation finish, lines to clear: {self.lines_to_clear}")
+            
+            # Safety check: ensure lines_to_clear isn't empty
+            if not self.lines_to_clear:
+                debugger.warning("finish_clear_animation called with empty lines_to_clear")
+                self.animating_clear = False
+                return
+            
+            # Ordenar las líneas a eliminar de mayor a menor (bottom to top)
+            sorted_lines = sorted(self.lines_to_clear, reverse=True)
+            debugger.debug(f"Sorted lines: {sorted_lines}")
+            
+            # Complete rewrite of the line clearing algorithm
+            # 1. Create a temporary field without the cleared lines
+            temp_field = []
+            for y in range(self.height):
+                if y not in self.lines_to_clear:
+                    temp_field.append(self.field[y].copy())
+                    
+            # 2. Create new empty rows to replace the cleared lines
+            empty_rows = [[0 for _ in range(self.width)] for _ in range(len(self.lines_to_clear))]
+            
+            # 3. Construct new field with empty rows at top
+            new_field = empty_rows + temp_field
+            
+            # 4. Make sure we have exactly the right number of rows
+            if len(new_field) > self.height:
+                # Too many rows, trim from the bottom (shouldn't normally happen)
+                new_field = new_field[:self.height]
+            elif len(new_field) < self.height:
+                # Too few rows, add more empty rows at the top (shouldn't normally happen)
+                missing = self.height - len(new_field)
+                new_field = [[0 for _ in range(self.width)] for _ in range(missing)] + new_field
+                
+            # Ensure we have the exact height needed
+            assert len(new_field) == self.height, f"Field height mismatch: {len(new_field)} != {self.height}"
+            
+            # Replace the entire field with the new version
+            self.field = new_field
+            
+            debugger.debug(f"Field reconstruction completed with {len(self.lines_to_clear)} lines cleared")
 
-        lines_count = len(self.lines_to_clear)
-        self.lines_cleared += lines_count
-        points = {1: 40, 2: 100, 3: 300, 4: 1200}
-        self.score += points.get(lines_count, 0) * self.level
+            lines_count = len(self.lines_to_clear)
+            self.lines_cleared += lines_count
+            points = {1: 40, 2: 100, 3: 300, 4: 1200}
+            self.score += points.get(lines_count, 0) * self.level
 
-        new_level = 1 + (self.lines_cleared // 10)
-        if new_level > self.level:
-            self.level = new_level
-            self.game_speed = max(100, 500 - (self.level - 1) * 50)
+            new_level = 1 + (self.lines_cleared // 10)
+            if new_level > self.level:
+                # Store old level for comparison
+                old_level = self.level
+                
+                # Update level
+                self.level = new_level
+                
+                # Improved speed calculation with better curve
+                # - Levels 1-9: Gradual decrease from 500ms to 200ms
+                # - Levels 10+: Slower decrease from 200ms to 150ms minimum
+                if self.level <= 9:
+                    # Levels 1-9: 500ms to 200ms
+                    self.game_speed = 500 - (self.level - 1) * 35
+                else:
+                    # Levels 10+: Slower progression with a minimum of 150ms
+                    high_level_speed = 200 - ((self.level - 9) * 5)
+                    self.game_speed = max(150, high_level_speed)
+                
+                debugger.debug(f"Updated game speed for level {self.level}: {self.game_speed}ms")
+                
+                # Signal level up for particle clearing
+                self.level_up_event = True
+                
+                debugger.debug(f"Level up! From {old_level} to {self.level} with game speed {self.game_speed}ms")
+                print(f"Level up! From {old_level} to {self.level} with game speed {self.game_speed}ms")
 
-        self.lines_to_clear = []
-        self.animating_clear = False
+            self.lines_to_clear = []
+            self.animating_clear = False
+            
+            debugger.log_performance("finish_clear_animation", start_time)
+            
+        except Exception as e:
+            debugger.error(f"Error in finish_clear_animation: {str(e)}")
+            # Ensure we reset animation state even if there's an error
+            self.lines_to_clear = []
+            self.animating_clear = False
+            raise  # Re-raise the exception to be caught by the global handler
 
     def get_piece_shape(self):
         return SHAPES[self.piece_type][self.rotation]
