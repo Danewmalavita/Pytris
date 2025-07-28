@@ -1,4 +1,5 @@
 # PyTris 2.0 - Guía de Funciones
+<img width="1024" height="1024" alt="logo full" src="https://github.com/user-attachments/assets/699df78c-4d97-485b-a297-4ef834c394b9" />
 
 ## Tabla de Contenidos
 1. [Introducción](#introducción)
