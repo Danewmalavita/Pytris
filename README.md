@@ -32,7 +32,7 @@ PyTris 2.0 es una versión mejorada del clásico juego Tetris, implementada en P
 
 2. Instala las dependencias requeridas:
    ```bash
-   pip install -r requirements.txt
+   pip install pygame
    ```
 
 3. Ejecuta el juego:
@@ -63,23 +63,9 @@ pytris-2.0/
     └── visual_effects.py  # Efectos visuales
 ```
 
-## Compilación a Ejecutable
+## Compilación a Ejecutable (beta)
 
-Para crear un archivo ejecutable (.exe) del juego, puedes utilizar PyInstaller o cx_Freeze.
-
-### Usando PyInstaller
-
-1. Instala PyInstaller:
-   ```bash
-   pip install pyinstaller
-   ```
-
-2. Compila el ejecutable:
-   ```bash
-   pyinstaller --onefile --windowed --add-data "assets;assets" main.py
-   ```
-
-3. El ejecutable se creará en la carpeta `dist`.
+Para crear un archivo ejecutable (.exe) del juego, puedes utilizar cx_Freeze.
 
 ### Usando cx_Freeze
 
@@ -96,7 +82,7 @@ Para crear un archivo ejecutable (.exe) del juego, puedes utilizar PyInstaller o
    # Dependencias
    build_exe_options = {
        "packages": ["pygame", "time", "random", "json", "os"],
-       "include_files": ["assets/", "highscores.json", "keybindings.json"]
+       "include_files": ["assets/", "gamescripts/", "highscores.json", "keybindings.json"]
    }
 
    # Configuración del ejecutable
