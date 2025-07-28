@@ -82,7 +82,7 @@ Para crear un archivo ejecutable (.exe) del juego, puedes utilizar cx_Freeze.
    # Dependencias
    build_exe_options = {
        "packages": ["pygame", "time", "random", "json", "os"],
-       "include_files": ["assets/", "gamescripts/", "highscores.json", "keybindings.json"]
+       "include_files": ["assets/", "gamescript/", "highscores.json", "keybindings.json"]
    }
 
    # Configuración del ejecutable
