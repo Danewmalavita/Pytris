@@ -384,6 +384,7 @@ def start_game(screen, settings):
                     screen_shake.start_shake(shake_intensity, 20)  # Intensidad, duración 20 frames
                     
                 # Actualizar animador de combo si hubo líneas eliminadas
+                combo_animator.sfx_vol = sfx_vol if 'sfx_vol' in locals() else 0.7
                 combo_animator.add_combo(len(game.lines_to_clear))
                 
                 try:

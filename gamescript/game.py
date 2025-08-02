@@ -2,6 +2,7 @@
 import pygame
 import time
 import random
+import os
 from .options import options_menu
 from .tetris_logic import TetrisGame, SHAPES, COLORS
 from .visual_effects import ParticleSystem, ScreenShake, ComboAnimator, DynamicBackground
@@ -9,33 +10,38 @@ from .graphics import TetrisRenderer, draw_text, draw_pause_menu, BLACK, WHITE, 
 from .debug_utils import debugger
 
 def pause_menu(screen, settings, current_song="tetris.mp3"):
+    from .audio_manager import audio_manager
+    
     clock = pygame.time.Clock()
-    options = ["Reanudar Juego", "Reintentar", "Cambiar Música", "Opciones", "Volver a inicio"]
+    options = ["Reanudar Juego", "Reintentar", "Cambiar Música", "Información", "Opciones", "Volver a inicio"]
     selected = 0
     
     if 'current_song' not in settings:
         settings['current_song'] = current_song
     
-    # Setup audio
-    audio_available = pygame.mixer.get_init() is not None
+    # Clase dummy para fallback (se usa si audio_manager falla)
+    class DummySound:
+        def __init__(self, sound_name=None):
+            self.sound_name = sound_name
+        def play(self): 
+            if hasattr(self, 'sound_name') and self.sound_name and audio_manager.audio_available:
+                audio_manager.play_sound(self.sound_name)
+        def set_volume(self, vol): pass
     
-    if audio_available:
-        try:
-            sfx_cursor = pygame.mixer.Sound("assets/sounds/sfx/cursor.wav")
-            sfx_enter = pygame.mixer.Sound("assets/sounds/sfx/enter.wav")
-            sfx_vol = 0 if settings['mute'] else (settings['volume_general'] * settings['volume_sfx'])
-            sfx_cursor.set_volume(sfx_vol)
-            sfx_enter.set_volume(sfx_vol)
-        except (pygame.error, FileNotFoundError):
-            audio_available = False
-    
-    # Create dummy sounds if audio unavailable
-    if not audio_available:
-        class DummySound:
-            def play(self): pass
-            def set_volume(self, vol): pass
-        sfx_cursor = DummySound()
-        sfx_enter = DummySound()
+    # Usamos el audio_manager para los efectos de sonido
+    sfx_cursor = DummySound("cursor")
+    sfx_enter = DummySound("enter")
+        
+    # Configuramos los efectos a través de una función wrapper para usar audio_manager
+    def play_cursor():
+        audio_manager.play_sound("cursor")
+        
+    def play_enter():
+        audio_manager.play_sound("enter")
+        
+    # Conectar las funciones dummy a los métodos del audio_manager
+    sfx_cursor.play = play_cursor
+    sfx_enter.play = play_enter
 
     from .controls import handle_pause_menu_controls
 
@@ -55,65 +61,63 @@ def pause_menu(screen, settings, current_song="tetris.mp3"):
         clock.tick(60)
 
 
-def start_game(screen, settings):
+def start_game(screen, settings, game_mode='classic'):
+    from .audio_manager import audio_manager
+    from .debug_utils import debugger
+    from .game_modes import create_game_mode
+    
     clock = pygame.time.Clock()
     
-    # Audio setup
-    audio_available = pygame.mixer.get_init() is not None
-    
+    # Clase para crear objetos de sonido dummy como fallback
     class DummySound:
-        def play(self): pass
-        def set_volume(self, vol): pass
+        def __init__(self, sound_name=None):
+            self.sound_name = sound_name
+        
+        def play(self): 
+            if self.sound_name and audio_manager.audio_available:
+                audio_manager.play_sound(self.sound_name)
+        
+        def set_volume(self, vol): 
+            pass
     
-    # Initialize sound effects
-    if audio_available:
-        try:
-            # Load selected music
-            current_song = settings.get('current_song', 'tetris.mp3')
-            pygame.mixer.music.load(f"assets/sounds/bgm/{current_song}")
-            
-            actual_music_vol = 0 if settings['mute'] else (settings['volume_general'] * settings['volume_bgm'])
-            pygame.mixer.music.set_volume(actual_music_vol)
-            
-            if not settings['mute']:
-                pygame.mixer.music.play(-1)
-    
-            # Load all sound effects
-            sfx_vol = 0 if settings['mute'] else (settings['volume_general'] * settings['volume_sfx'])
-            
-            sfx_pause = pygame.mixer.Sound("assets/sounds/sfx/pause.wav")
-            sfx_move = pygame.mixer.Sound("assets/sounds/sfx/move.wav")
-            sfx_rotate = pygame.mixer.Sound("assets/sounds/sfx/rotate.wav")
-            sfx_hard_drop = pygame.mixer.Sound("assets/sounds/sfx/harddrop.wav")
-            sfx_soft_drop = pygame.mixer.Sound("assets/sounds/sfx/softdrop.wav")
-            sfx_landing = pygame.mixer.Sound("assets/sounds/sfx/landing.wav")
-            sfx_single = pygame.mixer.Sound("assets/sounds/sfx/single.wav")
-            sfx_double = pygame.mixer.Sound("assets/sounds/sfx/double.wav")
-            sfx_triple = pygame.mixer.Sound("assets/sounds/sfx/triple.wav")
-            sfx_tetris = pygame.mixer.Sound("assets/sounds/sfx/tetris.wav")
-            sfx_tspin = pygame.mixer.Sound("assets/sounds/sfx/tspin.wav")
-            sfx_hold = pygame.mixer.Sound("assets/sounds/sfx/hold.wav")
-            sfx_drop = sfx_landing  # For compatibility
-            
-            # Set volume for all effects
-            for sfx in [sfx_pause, sfx_move, sfx_rotate, sfx_hard_drop, sfx_soft_drop, 
-                        sfx_landing, sfx_single, sfx_double, sfx_triple, sfx_tetris, 
-                        sfx_tspin, sfx_hold, sfx_drop]:
-                sfx.set_volume(sfx_vol)
-                
-        except (pygame.error, FileNotFoundError):
-            audio_available = False
-            settings['mute'] = True
-    
-    # Use dummy sounds if audio not available
-    if not audio_available:
+    # Asegurar que el audio esté precargado
+    if not audio_manager.audio_available:
+        debugger.warning("Audio no disponible, usando sonidos dummy")
         settings['mute'] = True
-        sfx_pause = sfx_move = sfx_rotate = sfx_hard_drop = sfx_soft_drop = DummySound()
-        sfx_landing = sfx_single = sfx_double = sfx_triple = sfx_tetris = DummySound()
-        sfx_tspin = sfx_hold = sfx_drop = DummySound()
     
-    # Initialize game components
-    game = TetrisGame()
+    # Inicializar la música
+    current_song = settings.get('current_song', 'tetris.mp3')
+    audio_manager.play_music(os.path.splitext(current_song)[0], -1)  # Quitar extensión
+    
+    # Configurar volumen según ajustes
+    audio_manager.set_master_volume(settings['volume_general'])
+    audio_manager.set_music_volume(settings['volume_bgm'])
+    audio_manager.set_sfx_volume(settings['volume_sfx'])
+    audio_manager.set_mute(settings['mute'])
+    
+    # Crear objetos de sonido que usarán el audio_manager
+    sfx_pause = DummySound("pause")
+    sfx_move = DummySound("move")
+    sfx_rotate = DummySound("rotate")
+    sfx_hard_drop = DummySound("harddrop")
+    sfx_soft_drop = DummySound("softdrop")
+    sfx_landing = DummySound("landing")
+    sfx_single = DummySound("single")
+    sfx_double = DummySound("double")
+    sfx_triple = DummySound("triple")
+    sfx_tetris = DummySound("tetris")
+    sfx_tspin = DummySound("tspin")
+    sfx_hold = DummySound("hold")
+    sfx_drop = DummySound("landing")  # Compatibilidad con sfx_landing
+    
+    # Initialize game with selected mode
+    debugger.debug(f"Iniciando juego en modo: {game_mode}")
+    game = create_game_mode(game_mode)
+    
+    # Iniciar temporizador en modos de tiempo
+    if game_mode in ['time_attack', 'ultra'] and hasattr(game, 'start'):
+        game.start()
+        
     renderer = TetrisRenderer(screen)
     
     # Visual effects
@@ -163,59 +167,73 @@ def start_game(screen, settings):
                 if new_paused and not paused:
                     sfx_pause.play()
                     paused = True
+                    
+                    # Pausar temporizador en modos de tiempo
+                    if hasattr(game, 'pause'):
+                        game.pause()
+                        
                     choice = pause_menu(screen, settings, settings.get('current_song', 'tetris.mp3'))
                     paused = False
+                    
+                    # Reanudar temporizador al salir de la pausa
+                    if hasattr(game, 'unpause'):
+                        game.unpause()
                     
                     # Procesar la elección del menú de pausa
                     if choice == "reanudar_juego":
                         pass
                     elif choice == "reintentar":
-                        # Reiniciar juego
-                        game = TetrisGame()
-                        start_game(screen, settings)
+                        # Restart game with the same game mode
+                        game_mode = None
+                        if hasattr(game, 'mode_name'):
+                            mode_name = game.mode_name.lower()
+                            if mode_name == "clásico":
+                                game_mode = "classic"
+                            elif mode_name == "contrarreloj":
+                                game_mode = "time_attack"
+                            elif mode_name == "maratón":
+                                game_mode = "marathon"
+                            elif mode_name == "ultra":
+                                game_mode = "ultra"
+                        start_game(screen, settings, game_mode=game_mode)
                         return
                     elif choice == "cambiar_música":
-                        # Cambiar entre las músicas
-                        if audio_available:
-                            pygame.mixer.music.stop()
-                            if settings.get('current_song') == 'tetris.mp3':
-                                settings['current_song'] = 'tetrisB.mp3'
-                            elif settings.get('current_song') == 'tetrisB.mp3':
-                                settings['current_song'] = 'song3.mp3'
-                            else:
-                                settings['current_song'] = 'tetris.mp3'
-                            
-                            # Cargar y reproducir la nueva música
-                            try:
-                                pygame.mixer.music.load(f"assets/sounds/bgm/{settings['current_song']}")
-                                if not settings['mute']:
-                                    actual_music_vol = settings['volume_general'] * settings['volume_bgm']
-                                    pygame.mixer.music.set_volume(actual_music_vol)
-                                    pygame.mixer.music.play(-1)
-                            except (pygame.error, FileNotFoundError):
-                                pass
+                        # Cambiar entre las músicas usando audio_manager
+                        from .audio_manager import audio_manager
+                        
+                        # Detener la música actual
+                        audio_manager.stop_music()
+                        
+                        # Rotar entre las pistas disponibles
+                        if settings.get('current_song') == 'tetris.mp3':
+                            settings['current_song'] = 'tetrisB.mp3'
+                        elif settings.get('current_song') == 'tetrisB.mp3':
+                            settings['current_song'] = 'song3.mp3'
+                        else:
+                            settings['current_song'] = 'tetris.mp3'
+                        
+                        # Extraer el nombre sin extensión para el audio_manager
+                        track_name = os.path.splitext(settings['current_song'])[0]
+                        
+                        # Reproducir la nueva pista
+                        audio_manager.play_music(track_name, -1)
                     elif choice == "opciones":
+                        from .audio_manager import audio_manager
+                        
                         options_menu(screen, settings)
                         screen = pygame.display.set_mode(settings['resolution'])
-                        # Actualizar volumen
-                        actual_music_vol = 0 if settings['mute'] else (settings['volume_general'] * settings['volume_bgm'])
-                        pygame.mixer.music.set_volume(actual_music_vol)
-                        sfx_vol = 0 if settings['mute'] else (settings['volume_general'] * settings['volume_sfx'])
-                        sfx_pause.set_volume(sfx_vol)
-                        sfx_move.set_volume(sfx_vol)
-                        sfx_rotate.set_volume(sfx_vol)
-                        sfx_hard_drop.set_volume(sfx_vol)
-                        sfx_soft_drop.set_volume(sfx_vol)
-                        sfx_single.set_volume(sfx_vol)
-                        sfx_tetris.set_volume(sfx_vol)
-                        sfx_drop.set_volume(sfx_vol)
+                        
+                        # Actualizar volumen a través del audio_manager
+                        audio_manager.set_master_volume(settings['volume_general'])
+                        audio_manager.set_music_volume(settings['volume_bgm'])
+                        audio_manager.set_sfx_volume(settings['volume_sfx'])
+                        audio_manager.set_mute(settings['mute'])
                     elif choice == "volver_a_inicio":
-                        pygame.mixer.music.stop()
-                        pygame.mixer.music.load("assets/sounds/bgm/menu.mp3")
-                        actual_music_vol = 0 if settings['mute'] else (settings['volume_general'] * settings['volume_bgm'])
-                        pygame.mixer.music.set_volume(actual_music_vol)
-                        if not settings['mute']:
-                            pygame.mixer.music.play(-1)
+                        from .audio_manager import audio_manager
+                        
+                        # Detener la música actual y reproducir la del menú
+                        audio_manager.stop_music()
+                        audio_manager.play_music("menu", -1)
                         return
                     elif choice == "quit":
                         running = False
@@ -235,8 +253,29 @@ def start_game(screen, settings):
                 hard_drop_gamepad = check_gamepad_action("hard_drop")
                 
                 if (hard_drop_key or hard_drop_gamepad) and not paused and not game.game_over:
+                    # Log which input triggered the hard drop
+                    if hard_drop_key:
+                        debugger.debug("Hard drop activado por teclado (SPACE)")
+                    else:
+                        debugger.debug("Hard drop activado por gamepad (botón/D-pad arriba)")
+                    
+                    # Ejecutar el hard drop
                     game.drop()
                     sfx_hard_drop.play()
+                    
+                    # Activar vibración en todos los controladores conectados si fue por gamepad
+                    if hard_drop_gamepad and pygame.joystick.get_init() and pygame.joystick.get_count() > 0:
+                        try:
+                            for i in range(pygame.joystick.get_count()):
+                                joy = pygame.joystick.Joystick(i)
+                                if joy.get_init():
+                                    try:
+                                        # Intentar vibrar (solo en controladores que lo soporten)
+                                        joy.rumble(0.7, 0.7, 150)
+                                    except:
+                                        pass  # Ignorar si no tiene soporte de vibración
+                        except Exception as e:
+                            debugger.error(f"Error al intentar vibración: {str(e)}")
                     
                     # Fix piece and check for line clears
                     line_clear_result = game.fix_piece()
@@ -249,10 +288,32 @@ def start_game(screen, settings):
                             shake_intensity = 8 if game.level_up_event else 6
                             shake_duration = 30 if game.level_up_event else 25
                             screen_shake.start_shake(shake_intensity, shake_duration)
+                            # Add T-spin text animation with proper type
+                            tspin_type = "Single"
+                            if line_clear_result['count'] == 2:
+                                tspin_type = "Double"
+                            elif line_clear_result['count'] == 3:
+                                tspin_type = "Triple"
+                            combo_animator.add_tspin_animation(tspin_type)
+                        
+                        # Check for perfect clear (all blocks removed from the field)
+                        is_perfect = line_clear_result.get("is_perfect", False)
+                        if is_perfect:
+                            # Play perfect sound
+                            audio_manager.play_sound("perfect")
+                            # Add perfect animation
+                            combo_animator.add_perfect_animation()
+                            # Add screen shake
+                            screen_shake.start_shake(10, 35)
                         
                         # Play appropriate sound effect for line clears
                         if line_clear_result["is_tetris"]:
                             sfx_tetris.play()
+                            # Add Tetris text animation
+                            combo_animator.add_tetris_animation()
+                            # More intense shake for Tetris if not already shaking for T-spin or Perfect
+                            if not is_tspin and not is_perfect:  # Avoid double shake
+                                screen_shake.start_shake(7, 25)
                         elif line_clear_result["count"] == 3:
                             sfx_triple.play()
                         elif line_clear_result["count"] == 2:
@@ -276,26 +337,48 @@ def start_game(screen, settings):
                     line_clear_result = game.fix_piece()
                     
                     if line_clear_result:
-                        # Handle T-spin special effects
+                        # Handle special spin effects (T-spin, J-spin, L-spin, etc.)
                         is_tspin = line_clear_result.get("is_tspin", False)
+                        special_spin = line_clear_result.get("special_spin", False)
                         
-                        if is_tspin:
-                            # T-spin effects
+                        if is_tspin or special_spin:
+                            # Special spin effects
                             sfx_tspin.play()
                             shake_intensity = 8 if game.level_up_event else 6
                             shake_duration = 30 if game.level_up_event else 25
                             screen_shake.start_shake(shake_intensity, shake_duration)
                             
-                            # Add T-spin text animation
-                            tspin_text = "¡T-SPIN!"
-                            combo_animator.add_text_animation(
-                                f"{tspin_text} +{line_clear_result['count']} LÍNEAS", 
-                                (255, 50, 255)
-                            )
+                            # Get the spin type
+                            spin_type = line_clear_result.get("spin_type", "T-spin")
+                            
+                            # Add spin text animation with proper type
+                            spin_level = "Single"
+                            if line_clear_result['count'] == 2:
+                                spin_level = "Double"
+                            elif line_clear_result['count'] == 3:
+                                spin_level = "Triple"
+                                
+                            # Use existing T-spin animation for all spins
+                            combo_animator.add_tspin_animation(f"{spin_type} {spin_level}")
+                        
+                        # Check for perfect clear (all blocks removed from the field)
+                        is_perfect = line_clear_result.get("is_perfect", False)
+                        if is_perfect:
+                            # Play perfect sound
+                            audio_manager.play_sound("perfect")
+                            # Add perfect animation
+                            combo_animator.add_perfect_animation()
+                            # Add screen shake
+                            screen_shake.start_shake(10, 35)
                         
                         # Play appropriate sound for line clears
                         if line_clear_result["is_tetris"]:
                             sfx_tetris.play()
+                            # Add Tetris text animation
+                            combo_animator.add_tetris_animation()
+                            # More intense shake for Tetris if not already shaking for T-spin or Perfect
+                            if not is_tspin and not is_perfect:  # Avoid double shake
+                                screen_shake.start_shake(7, 25)
                         elif line_clear_result["count"] == 3:
                             sfx_triple.play()
                         elif line_clear_result["count"] == 2:
@@ -389,21 +472,23 @@ def start_game(screen, settings):
             clock.tick(60)
             continue
 
-        # DAS/ARR movement handling (optimized)
+        # DAS/ARR movement handling (simplified and optimized)
         for direction, pressed, start_time, move_func, sound in [
             ('left', das_left_pressed, das_left_start, game.move_left, sfx_move),
             ('right', das_right_pressed, das_right_start, game.move_right, sfx_move),
             ('down', das_down_pressed, das_down_start, 
              lambda: game.move_down(is_soft_drop=True), sfx_soft_drop)
         ]:
-            if pressed and (elapsed := now - start_time) >= DAS_DELAY:
-                arr_elapsed = elapsed - DAS_DELAY
-                arr_steps = arr_elapsed // ARR_INTERVAL
+            if pressed:
+                elapsed = now - start_time
                 
-                # Apply movement on ARR timing
-                if arr_steps > 0 and arr_elapsed % ARR_INTERVAL < clock.get_time():
-                    if move_func():
-                        sound.play()
+                # First delay (DAS - Delayed Auto Shift)
+                if elapsed >= DAS_DELAY:
+                    # Calculate auto-repeat (ARR - Auto-Repeat Rate)
+                    # Only move if enough time has passed since the last ARR step
+                    if (elapsed - DAS_DELAY) % ARR_INTERVAL < clock.get_time():
+                        if move_func():
+                            sound.play()
 
         # Actualizar el fondo dinámico según el nivel
         dynamic_background.update(game.level)
@@ -413,10 +498,9 @@ def start_game(screen, settings):
             debugger.debug(f"Level up detected! Clearing particles...")
             particle_system.particles = []  # Clear all particles on level up
             
-            # Reproducir sonido de nivel completado
-            sfx_lvup = pygame.mixer.Sound("assets/sounds/sfx/lvup.wav")
-            sfx_lvup.set_volume(sfx_vol)
-            sfx_lvup.play()
+            # Reproducir sonido de nivel completado mediante audio_manager
+            from .audio_manager import audio_manager
+            audio_manager.play_sound("lvup")
             
             game.level_up_event = False
         
@@ -456,21 +540,38 @@ def start_game(screen, settings):
 
         # Game Over handling
         if game.game_over:
-            # Play Game Over sound once
+            # Play Game Over sound once using audio_manager
+            from .audio_manager import audio_manager
+            
             if not hasattr(game, "gameover_sound_played"):
-                sfx_gameover = pygame.mixer.Sound("assets/sounds/sfx/gameover.wav")
-                sfx_gameover.set_volume(sfx_vol)
-                sfx_gameover.play()
+                # Check if it's a marathon completion (victory) to play clear.wav instead of gameover.wav
+                if hasattr(game, 'game_won') and game.game_won:
+                    audio_manager.play_sound("clear")
+                else:
+                    audio_manager.play_sound("gameover")
                 game.gameover_sound_played = True
                 
                 # Handle high score
                 from .highscore import is_high_score, add_high_score, get_player_name, show_high_scores
                 
-                if is_high_score(game.score):
+                # Get game mode for high scores
+                game_mode = None
+                if hasattr(game, 'mode_name'):
+                    game_mode = game.mode_name.lower()
+                    if game_mode == "clásico":
+                        game_mode = "classic"
+                    elif game_mode == "contrarreloj":
+                        game_mode = "time_attack"
+                    elif game_mode == "maratón":
+                        game_mode = "marathon"
+                    elif game_mode == "ultra":
+                        game_mode = "ultra"
+                
+                if is_high_score(game.score, game_mode):
                     player_name = get_player_name(screen, game.score)
                     if player_name:
-                        add_high_score(player_name, game.score, game.level, game.lines_cleared)
-                        show_high_scores(screen, settings, game.score)
+                        add_high_score(player_name, game.score, game.level, game.lines_cleared, game_mode)
+                        show_high_scores(screen, settings, game.score, game.mode_name)
             
             # Draw Game Over screen
             renderer.draw_game_over(screen, game, settings)
@@ -485,24 +586,39 @@ def start_game(screen, settings):
                 action = handle_game_over_controls(event)
                 
                 if action == "volver_a_inicio":
-                    # Return to main menu with menu music
-                    pygame.mixer.music.stop()
-                    pygame.mixer.music.load("assets/sounds/bgm/menu.mp3")
-                    actual_music_vol = 0 if settings['mute'] else (settings['volume_general'] * settings['volume_bgm'])
-                    pygame.mixer.music.set_volume(actual_music_vol)
-                    if not settings['mute']:
-                        pygame.mixer.music.play(-1)
+                    # Return to main menu with menu music using audio_manager
+                    from .audio_manager import audio_manager
+                    
+                    audio_manager.stop_music()
+                    audio_manager.play_music("menu", -1)
                     return
                     
                 elif action == "reiniciar":
-                    # Restart game
-                    start_game(screen, settings)
+                    # Restart game with the same game mode
+                    game_mode = None
+                    if hasattr(game, 'mode_name'):
+                        mode_name = game.mode_name.lower()
+                        if mode_name == "clásico":
+                            game_mode = "classic"
+                        elif mode_name == "contrarreloj":
+                            game_mode = "time_attack"
+                        elif mode_name == "maratón":
+                            game_mode = "marathon"
+                        elif mode_name == "ultra":
+                            game_mode = "ultra"
+                    start_game(screen, settings, game_mode=game_mode)
                     return
                     
                 elif action == "mostrar_puntuaciones":
                     # Show high scores and redraw game over screen
                     from .highscore import show_high_scores
-                    show_high_scores(screen, settings)
+                    
+                    # Get game mode
+                    game_mode = None
+                    if hasattr(game, 'mode_name'):
+                        game_mode = game.mode_name
+                        
+                    show_high_scores(screen, settings, None, game_mode)
                     renderer.draw_game_over(screen, game, settings)
         
 
@@ -510,4 +626,6 @@ def start_game(screen, settings):
         pygame.display.flip()
         clock.tick(60)
 
-    pygame.mixer.music.stop()
+    # Detener la música al salir
+    from .audio_manager import audio_manager
+    audio_manager.stop_music()

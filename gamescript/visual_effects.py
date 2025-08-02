@@ -6,8 +6,14 @@ import random
 import math
 import time
 import traceback
+import os
 from .debug_utils import debugger
 from .tetris_logic import SHAPES, COLORS
+
+# Define special font path
+special_font_name = "assets/fonts/tetrisfont.ttf"
+if not os.path.exists(special_font_name):
+    special_font_name = None
 
 class Particle:
     """Clase para representar partículas que se muestran cuando se eliminan líneas"""
@@ -372,6 +378,18 @@ class ComboAnimator:
         self.custom_text = ""
         self.custom_text_color = (255, 255, 255)
         self.custom_text_time = 0
+        # Para texto de tetris
+        self.tetris_text = ""
+        self.tetris_text_color = (50, 255, 255)
+        self.tetris_text_time = 0
+        # Para texto de perfect
+        self.perfect_text = ""
+        self.perfect_text_color = (255, 255, 50)
+        self.perfect_text_time = 0
+        # Para texto de tiempo restante
+        self.time_text = ""
+        self.time_text_color = (255, 100, 100)
+        self.time_text_time = 0
         # Para reproducción de sonidos
         self.sfx_vol = 1.0
         
@@ -388,22 +406,24 @@ class ComboAnimator:
         # ya que es el sonido normal de la línea que se acaba de eliminar
         if self.combo_count >= 2:
             try:
+                # Usar el audio_manager para reproducir los sonidos de combo
+                from .audio_manager import audio_manager
+                from .debug_utils import debugger
+                
                 # Los archivos de sonido comienzan en combo2.wav para combo x2, combo3.wav para combo x3, etc.
                 # Por lo tanto, el número de archivo coincide con el contador de combo
                 combo_num = min(8, self.combo_count)  # Limitado a 8 máximo
-                combo_sound = pygame.mixer.Sound(f"assets/sounds/sfx/combo{combo_num}.wav")
+                sound_name = f"combo{combo_num}"
                 
-                # Usar el volumen de efectos configurado
-                try:
-                    if pygame.mixer.get_init() is not None:
-                        combo_sound.set_volume(self.sfx_vol)
-                        combo_sound.play()
-                except Exception as e:
-                    # Si hay un error al reproducir el sonido, simplemente lo ignoramos
-                    pass
-            except Exception:
-                # Si hay un error al cargar el sonido, simplemente lo ignoramos
-                pass
+                debugger.debug(f"Reproduciendo sonido de combo: {sound_name}")
+                success = audio_manager.play_sound(sound_name)
+                if not success:
+                    debugger.warning(f"No se pudo reproducir el sonido de combo: {sound_name}")
+                    
+            except Exception as e:
+                # Si hay un error, registrarlo y continuar
+                from .debug_utils import debugger
+                debugger.error(f"Error al reproducir sonido de combo: {str(e)}")
     
     def add_text_animation(self, text, color=(255, 255, 255)):
         """Añade una animación de texto personalizada (ej: T-Spin)"""
@@ -412,6 +432,62 @@ class ComboAnimator:
         self.custom_text_time = 120  # Mostrar durante 2 segundos
         self.text_scale = 1.5  # Empieza grande y se reduce
         self.rotation = random.uniform(-5, 5)  # Rotación aleatoria menos intensa que el combo
+        
+    def add_tetris_animation(self):
+        """Añade una animación de texto para un Tetris"""
+        self.tetris_text = "¡TETRIS!"
+        self.tetris_text_time = 120  # Mostrar durante 2 segundos
+        self.text_scale = 1.7  # Empieza grande y se reduce
+        self.rotation = random.uniform(-8, 8)  # Más rotación para el tetris
+        
+    def add_perfect_animation(self):
+        """Añade una animación de texto para un Perfect Clear"""
+        self.perfect_text = "¡PERFECT!"
+        self.perfect_text_time = 150  # Mostrar durante 2.5 segundos
+        self.text_scale = 1.8  # Empieza grande y se reduce
+        self.rotation = random.uniform(-10, 10)  # Rotación más intensa
+        
+    def add_tspin_animation(self, tspin_text="T-spin Single"):
+        """Añade una animación de texto para un T-Spin o cualquier spin especial
+        
+        Args:
+            tspin_text (str): Texto completo del spin (ej: 'T-Spin Single', 'J-Spin Double', etc.)
+        """
+        # Determinar el color basado en el tipo de spin
+        color = (230, 100, 255)  # Color púrpura/violeta por defecto para T-Spin
+        
+        # Formatear texto del spin
+        if "J-Spin" in tspin_text:
+            color = (0, 0, 255)  # Azul para J-Spin
+        elif "L-Spin" in tspin_text:
+            color = (255, 128, 0)  # Naranja para L-Spin
+        elif "Z-Spin" in tspin_text:
+            color = (255, 0, 0)  # Rojo para Z-Spin
+        elif "S-Spin" in tspin_text:
+            color = (0, 255, 0)  # Verde para S-Spin
+            
+        # Formatear el texto para mostrar
+        self.custom_text = f"¡{tspin_text.upper()}!"
+            
+        # Asignar color específico para el tipo de spin
+        self.custom_text_color = color
+        self.custom_text_time = 150  # Mostrar durante 2.5 segundos
+        self.text_scale = 1.7  # Empieza grande y se reduce
+        self.rotation = random.uniform(-8, 8)  # Rotación aleatoria para dinamismo
+        
+        # Intentar reproducir un sonido específico para el spin
+        try:
+            from .audio_manager import audio_manager
+            audio_manager.play_sound("tspin")
+        except Exception as e:
+            debugger.warning(f"No se pudo reproducir el sonido de spin: {str(e)}")
+        
+    def add_time_warning(self, seconds):
+        """Añade una animación de advertencia de tiempo"""
+        self.time_text = f"{seconds}s"
+        self.time_text_time = 90  # Mostrar durante 1.5 segundos
+        self.text_scale = 1.6  # Empieza grande y se reduce
+        self.rotation = random.uniform(-6, 6)
         
     def update(self):
         """Actualiza el estado de la animación de combo"""
@@ -505,6 +581,102 @@ class ComboAnimator:
             # Limpiar el texto cuando termine la animación
             if self.custom_text_time <= 0:
                 self.custom_text = ""
+                
+        # Dibujar animación de tetris si está activa
+        if self.tetris_text and self.tetris_text_time > 0:
+            # Ajustar tamaño según el tiempo restante
+            scale_factor = min(1.0, self.tetris_text_time / 60)
+            font_size = int(40 * self.text_scale * scale_factor)
+            try:
+                font = pygame.font.Font(special_font_name, font_size) if special_font_name else pygame.font.SysFont("Arial", font_size, bold=True)
+            except:
+                font = pygame.font.SysFont("Arial", font_size, bold=True)
+            
+            # Reducir el tiempo de animación
+            self.tetris_text_time -= 1
+            
+            # Crear superficie de texto
+            text_surface = font.render(self.tetris_text, True, self.tetris_text_color)
+            
+            # Rotar el texto para efecto dinámico
+            text_surface = pygame.transform.rotate(text_surface, self.rotation)
+            text_rect = text_surface.get_rect(center=(center_x, center_y - 100))  # Mostrar más arriba
+            
+            # Dibujar sombra para mejor visibilidad
+            shadow_surface = font.render(self.tetris_text, True, (0, 0, 0))
+            shadow_surface = pygame.transform.rotate(shadow_surface, self.rotation)
+            shadow_rect = shadow_surface.get_rect(center=(center_x + 2, center_y - 100 + 2))
+            screen.blit(shadow_surface, shadow_rect)
+            
+            screen.blit(text_surface, text_rect)
+            
+            # Limpiar el texto cuando termine la animación
+            if self.tetris_text_time <= 0:
+                self.tetris_text = ""
+                
+        # Dibujar animación de perfect si está activa
+        if self.perfect_text and self.perfect_text_time > 0:
+            # Ajustar tamaño según el tiempo restante
+            scale_factor = min(1.0, self.perfect_text_time / 60)
+            font_size = int(45 * self.text_scale * scale_factor)
+            try:
+                font = pygame.font.Font(special_font_name, font_size) if special_font_name else pygame.font.SysFont("Arial", font_size, bold=True)
+            except:
+                font = pygame.font.SysFont("Arial", font_size, bold=True)
+            
+            # Reducir el tiempo de animación
+            self.perfect_text_time -= 1
+            
+            # Crear superficie de texto
+            text_surface = font.render(self.perfect_text, True, self.perfect_text_color)
+            
+            # Rotar el texto para efecto dinámico
+            text_surface = pygame.transform.rotate(text_surface, self.rotation)
+            text_rect = text_surface.get_rect(center=(center_x, center_y))  # Centrado
+            
+            # Dibujar sombra para mejor visibilidad
+            shadow_surface = font.render(self.perfect_text, True, (0, 0, 0))
+            shadow_surface = pygame.transform.rotate(shadow_surface, self.rotation)
+            shadow_rect = shadow_surface.get_rect(center=(center_x + 2, center_y + 2))
+            screen.blit(shadow_surface, shadow_rect)
+            
+            screen.blit(text_surface, text_rect)
+            
+            # Limpiar el texto cuando termine la animación
+            if self.perfect_text_time <= 0:
+                self.perfect_text = ""
+                
+        # Dibujar advertencia de tiempo si está activa
+        if self.time_text and self.time_text_time > 0:
+            # Ajustar tamaño según el tiempo restante
+            scale_factor = min(1.0, self.time_text_time / 60)
+            font_size = int(42 * self.text_scale * scale_factor)
+            try:
+                font = pygame.font.Font(special_font_name, font_size) if special_font_name else pygame.font.SysFont("Arial", font_size, bold=True)
+            except:
+                font = pygame.font.SysFont("Arial", font_size, bold=True)
+            
+            # Reducir el tiempo de animación
+            self.time_text_time -= 1
+            
+            # Crear superficie de texto
+            text_surface = font.render(self.time_text, True, self.time_text_color)
+            
+            # Rotar el texto para efecto dinámico
+            text_surface = pygame.transform.rotate(text_surface, self.rotation)
+            text_rect = text_surface.get_rect(center=(center_x, center_y - 150))  # Mostrar arriba
+            
+            # Dibujar sombra para mejor visibilidad
+            shadow_surface = font.render(self.time_text, True, (0, 0, 0))
+            shadow_surface = pygame.transform.rotate(shadow_surface, self.rotation)
+            shadow_rect = shadow_surface.get_rect(center=(center_x + 2, center_y - 150 + 2))
+            screen.blit(shadow_surface, shadow_rect)
+            
+            screen.blit(text_surface, text_rect)
+            
+            # Limpiar el texto cuando termine la animación
+            if self.time_text_time <= 0:
+                self.time_text = ""
 
 
 class TetrominoVisualizer:

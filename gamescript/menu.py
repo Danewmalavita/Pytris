@@ -177,8 +177,17 @@ def draw_pytris_logo_animated(surface, animation_progress, center_x, center_y):
         # Mover a la siguiente posición
         current_x += (letter_widths[i] + letter_spacing) * SPRITE_SIZE
 
-def draw_text(surface, text, size, color, x, y):
-    font = pygame.font.SysFont("Arial", size)
+def draw_text(surface, text, size, color, x, y, font_name=None):
+    try:
+        if font_name:
+            # Intentar cargar la fuente específica
+            font = pygame.font.Font(font_name, size)
+        else:
+            # Usar la fuente principal del juego como predeterminada
+            font = pygame.font.Font("assets/fonts/mainfont.ttf", size)
+    except Exception:
+        # Usar Arial como respaldo si hay error
+        font = pygame.font.SysFont("Arial", size)
     text_surface = font.render(text, True, color)
     text_rect = text_surface.get_rect(center=(x, y))
     surface.blit(text_surface, text_rect)
@@ -189,46 +198,47 @@ def main_menu(screen, settings):
     # Importar el módulo de controles
     from .controls import handle_main_menu_controls
     
-    # Comprobar si el audio está disponible
-    audio_available = pygame.mixer.get_init() is not None
+    # Importar y usar el audio_manager para los efectos de sonido
+    from .audio_manager import audio_manager
+    from .debug_utils import debugger
     
-    # Configuración de audio solo si está disponible
-    if audio_available:
-        try:
-            pygame.mixer.music.load("./assets/sounds/bgm/menu.mp3")
-            
-            # Aplicar los ajustes de volumen
-            actual_music_vol = 0 if settings['mute'] else (settings['volume_general'] * settings['volume_bgm'])
-            pygame.mixer.music.set_volume(actual_music_vol)
-            
-            if not settings['mute']:
-                pygame.mixer.music.play(-1)
-                
-            # Cargar efectos de sonido
-            sfx_cursor = pygame.mixer.Sound("assets/sounds/sfx/cursor.wav")
-            sfx_enter = pygame.mixer.Sound("assets/sounds/sfx/enter.wav")
-            sfx_back = pygame.mixer.Sound("assets/sounds/sfx/back.wav")
-            
-            # Ajustar volumen de efectos de sonido según la configuración
-            sfx_vol = 0 if settings['mute'] else (settings['volume_general'] * settings['volume_sfx'])
-            sfx_cursor.set_volume(sfx_vol)
-            sfx_enter.set_volume(sfx_vol)
-            sfx_back.set_volume(sfx_vol)
-        except (pygame.error, FileNotFoundError):
-            audio_available = False
-            settings['mute'] = True
-    else:
+    # Configurar el gestor de audio con los ajustes actuales
+    audio_manager.set_master_volume(settings['volume_general'])
+    audio_manager.set_music_volume(settings['volume_bgm'])
+    audio_manager.set_sfx_volume(settings['volume_sfx'])
+    audio_manager.set_mute(settings['mute'])
+    
+    # Asegurar que el audio esté precargado e intentar reproducir música
+    if not audio_manager.audio_available:
+        debugger.warning("Audio no disponible para el menú principal")
         settings['mute'] = True
-        
-    # Crear objetos nulos para los efectos si no hay audio
-    if not audio_available:
-        class DummySound:
-            def play(self): pass
-            def set_volume(self, vol): pass
+    else:
+        debugger.info("Audio disponible, iniciando música del menú")
+        # Intentar reproducir la música del menú
+        try:
+            success = audio_manager.play_music("menu", -1)
+            if not success:
+                debugger.warning("No se pudo reproducir la música del menú")
+        except Exception as e:
+            debugger.error(f"Error al reproducir música del menú: {str(e)}")
+            # No marcar como silenciado, solo falló esta pista
+    
+    # Crear objetos de sonido que usarán el audio_manager
+    class DummySound:
+        def __init__(self, sound_name=None):
+            self.sound_name = sound_name
             
-        sfx_cursor = DummySound()
-        sfx_enter = DummySound()
-        sfx_back = DummySound()
+        def play(self):
+            if self.sound_name and audio_manager.audio_available:
+                audio_manager.play_sound(self.sound_name)
+                
+        def set_volume(self, vol):
+            pass  # El volumen se maneja a través del audio_manager
+            
+    # Crear objetos para cada efecto de sonido
+    sfx_cursor = DummySound("cursor")
+    sfx_enter = DummySound("enter")
+    sfx_back = DummySound("back")
 
     menu_items = ["Modo Arcade", "Puntuaciones", "Opciones", "Salir"]
     selected = 0
@@ -422,28 +432,34 @@ def main_menu(screen, settings):
             )
             
             if exit_flag:
-                if pygame.mixer.get_init() is not None:
-                    pygame.time.wait(100)  # Pequeña pausa para permitir que suene el efecto
+                # Pequeña pausa para permitir que suene el efecto
+                pygame.time.wait(100)
                 running = False
                 
             if action:
-                if pygame.mixer.get_init() is not None:
-                    pygame.time.wait(100)  # Pequeña pausa para permitir que suene el efecto
+                # Pequeña pausa para permitir que suene el efecto
+                pygame.time.wait(100)
                 
                 if action == "modo_arcade":
-                    if pygame.mixer.get_init() is not None:
-                        pygame.mixer.music.stop()
-                    from .game import start_game
-                    start_game(screen, settings)
+                    # Mostrar selección de modos de juego
+                    from .mode_selection import mode_selection
+                    selected_mode = mode_selection(screen, settings)
+                    
+                    if selected_mode:
+                        # Detener la música al cambiar de modo
+                        from .audio_manager import audio_manager
+                        audio_manager.stop_music()
+                        from .game import start_game
+                        start_game(screen, settings, game_mode=selected_mode)
                 elif action == "puntuaciones":
                     # Import here to avoid circular import
                     from .highscore import show_high_scores
-                    show_high_scores(screen, settings)
+                    show_high_scores(screen, settings, None, "Modo Clásico")
                 elif action == "opciones":
                     options_menu(screen, settings)
 
         clock.tick(60)
 
-    # Stop music only if mixer is available
-    if pygame.mixer.get_init() is not None:
-        pygame.mixer.music.stop()
+    # Detener la música al salir
+    from .audio_manager import audio_manager
+    audio_manager.stop_music()

@@ -78,8 +78,9 @@ class TetrisGame:
         self.level = 1
         self.lines_cleared = 0
         self.game_speed = 500
-        self.next_piece_type = None
-        self.next_piece_shape = None
+        self.next_piece_type = None  # Para compatibilidad con código antiguo
+        self.next_piece_shape = None  # Para compatibilidad con código antiguo
+        self.next_pieces = []  # Lista para las siguientes 3 piezas
         self.bag = []
         self.combo_count = 0  # Contador de combos consecutivos
         self.last_clear_time = 0  # Para el temporizador de combo
@@ -90,7 +91,6 @@ class TetrisGame:
 
     def reset(self):
         self.field = [[0 for _ in range(self.width)] for _ in range(self.height)]
-        self.new_piece()
         self.score = 0
         self.level = 1
         self.lines_cleared = 0
@@ -102,37 +102,91 @@ class TetrisGame:
         self.hold_piece_type = None
         self.hold_used = False
         self.bag = []
+        self.next_pieces = []  # Inicializar lista vacía para las próximas piezas
         self.lines_to_clear = []
         self.clear_animation_time = 0
         self.animating_clear = False
         self.combo_count = 0
         self.level_up_event = False
         self.soft_drop_score = 0
+        
+        # Inicializar la bolsa con el algoritmo 7-bag shuffle
+        self.refill_bag()
+        
+        # Inicializar la pieza actual y las próximas piezas
+        self.prepare_first_piece()
 
     def refill_bag(self):
+        """
+        Implementa el sistema 7-bag shuffle: todas las 7 piezas aparecen exactamente
+        una vez antes de que cualquiera se repita, asegurando una distribución justa.
+        """
         self.bag = list(range(7))
         random.shuffle(self.bag)
 
-    def new_piece(self):
-        if self.next_piece_type is not None:
-            self.piece_type = self.next_piece_type
-            self.rotation = 0
-        else:
+    def prepare_first_piece(self):
+        """
+        Inicializa la primera pieza del juego y las 3 piezas siguientes.
+        """
+        # Asegurar que la bolsa esté llena
+        if len(self.bag) < 4:  # Necesitamos al menos 4 piezas (1 actual + 3 siguientes)
+            self.refill_bag()
+            
+        # Obtener la pieza actual
+        self.piece_type = self.bag.pop(0)
+        self.rotation = 0
+        
+        # Generar las 3 piezas siguientes
+        self.next_pieces = []
+        for _ in range(3):
             if not self.bag:
                 self.refill_bag()
-            self.piece_type = self.bag.pop(0)
-            self.rotation = 0
-
-        if not self.bag:
-            self.refill_bag()
-        self.next_piece_type = self.bag.pop(0)
+            self.next_pieces.append(self.bag.pop(0))
+            
+        # Mantener compatibilidad con el código existente
+        self.next_piece_type = self.next_pieces[0]
         self.next_piece_shape = SHAPES[self.next_piece_type][0]
-
+        
+        # Posicionar la pieza en el tablero
         shape = SHAPES[self.piece_type][self.rotation]
         width = len(shape[0])
         self.piece_x = (self.width // 2) - (width // 2)
         self.piece_y = 0
-
+        
+        # Verificar game over
+        if not self.is_valid_position():
+            self.game_over = True
+    
+    def new_piece(self):
+        """
+        Genera una nueva pieza para el jugador tomando la primera de la cola de piezas siguientes,
+        y añade una nueva pieza al final de la cola para mantener 3 piezas visibles.
+        """
+        # Tomar la primera pieza de la cola como la pieza actual
+        self.piece_type = self.next_pieces[0]
+        
+        # Eliminar la primera pieza de la cola y desplazar las demás
+        self.next_pieces = self.next_pieces[1:]
+        
+        # Añadir una nueva pieza al final de la cola
+        if not self.bag:
+            self.refill_bag()
+        self.next_pieces.append(self.bag.pop(0))
+        
+        # Actualizar next_piece_type para mantener compatibilidad
+        self.next_piece_type = self.next_pieces[0]
+        self.next_piece_shape = SHAPES[self.next_piece_type][0]
+        
+        # Resetear la rotación
+        self.rotation = 0
+        
+        # Posicionar la pieza en el tablero
+        shape = SHAPES[self.piece_type][self.rotation]
+        width = len(shape[0])
+        self.piece_x = (self.width // 2) - (width // 2)
+        self.piece_y = 0
+        
+        # Verificar game over
         if not self.is_valid_position():
             self.game_over = True
 
@@ -262,22 +316,51 @@ class TetrisGame:
         self.piece_y = drop_y
 
     def hold_piece(self):
+        """
+        Intercambia la pieza actual con la pieza en hold, o toma la primera pieza de next_pieces
+        si es la primera vez que se usa el hold.
+        """
+        # No se puede usar hold si ya se usó o si el juego terminó
         if self.hold_used or self.game_over:
             return
+            
+        # Guardar la pieza actual temporalmente
         current = self.piece_type
+        
         if self.hold_piece_type is None:
-            self.piece_type = self.next_piece_type
-            # Usar el sistema de bolsa para el siguiente tetromino
+            # Primera vez que se usa hold: tomar la primera pieza de next_pieces
+            # La nueva pieza actual será la primera de la cola
+            self.piece_type = self.next_pieces[0]
+            
+            # Reorganizar la cola de piezas siguientes
+            self.next_pieces = self.next_pieces[1:]
+            
+            # Añadir una nueva pieza al final para mantener 3 piezas en la cola
             if not self.bag:
                 self.refill_bag()
-            self.next_piece_type = self.bag.pop(0)
+            self.next_pieces.append(self.bag.pop(0))
         else:
+            # Intercambiar la pieza actual con la pieza en hold
             self.piece_type, self.hold_piece_type = self.hold_piece_type, current
+        
+        # Guardar la pieza actual en hold
         self.hold_piece_type = current
+        
+        # Actualizar next_piece_type para compatibilidad
+        self.next_piece_type = self.next_pieces[0]
+        self.next_piece_shape = SHAPES[self.next_piece_type][0]
+        
+        # Resetear la posición y rotación de la pieza
         self.rotation = 0
-        self.piece_x = (self.width // 2) - (len(SHAPES[self.piece_type][0][0]) // 2)
+        shape = SHAPES[self.piece_type][0]
+        width = len(shape[0])
+        self.piece_x = (self.width // 2) - (width // 2)
         self.piece_y = 0
+        
+        # Marcar que hold ya fue usado
         self.hold_used = True
+        
+        # Verificar si la posición es válida (game over si no lo es)
         if not self.is_valid_position():
             self.game_over = True
 
@@ -348,9 +431,11 @@ class TetrisGame:
             self.score += 400 * self.level
             debugger.debug(f"¡T-SPIN sin líneas detectado! 400 puntos × nivel {self.level}")
 
-        # Solo crear nueva pieza si no hay animación pendiente
-        if not self.animating_clear:
+        # Generar nueva pieza solo cuando no hay animación de eliminación de líneas
+        # Esto evita que se cambie la cola de piezas durante la animación de eliminación
+        if not self.lines_to_clear:  # Si no hay líneas para eliminar, generamos una nueva pieza inmediatamente
             self.new_piece()
+        # Si hay líneas para eliminar, la nueva pieza se generará después de la animación en clear_lines
 
         return line_clear_result
 
@@ -369,9 +454,17 @@ class TetrisGame:
             self.animating_clear = True
             self.clear_animation_time = now
             
+            # Verificar si es un Perfect Clear (todos los bloques eliminados)
+            is_perfect = all(all(cell == 0 for cell in row) for row in self.field)
+            
+            # Calcular líneas después de la eliminación
+            temp_field = [self.field[y].copy() for y in range(self.height) if y not in self.lines_to_clear]
+            is_perfect = len(temp_field) == 0 or all(all(cell == 0 for cell in row) for row in temp_field)
+            
             return {
                 "count": len(self.lines_to_clear),
                 "is_tetris": (len(self.lines_to_clear) == 4),
+                "is_perfect": is_perfect,  # Nuevo flag para Perfect Clear
                 "combo": self.combo_count,
                 "combo_active": True  # Indica que el combo sigue activo
             }
@@ -455,6 +548,9 @@ class TetrisGame:
             # Reset animation state
             self.lines_to_clear = []
             self.animating_clear = False
+            
+            # Ya no es necesario generar una nueva pieza aquí, ya que se genera en el método fix_piece()
+            # cuando animating_clear se establece a False
             
         except Exception as e:
             debugger.error(f"Error in finish_clear_animation: {str(e)}")

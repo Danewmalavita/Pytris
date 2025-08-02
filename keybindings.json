@@ -170,6 +170,11 @@
         "button_type": "button",
         "button": 5,
         "description": "Botón RB/R1"
+      },
+      {
+        "button_type": "button",
+        "button": 4,
+        "description": "Botón LB/L1"
       }
     ],
     "pause": [

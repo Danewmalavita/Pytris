@@ -12,6 +12,10 @@ KEYBINDINGS_FILE = "keybindings.json"
 gamepads = []
 gamepad_deadzone = 0.2  # Zona muerta para evitar inputs no intencionados
 
+# Constantes para el DAS (Delayed Auto-Shift)
+DAS_DELAY = 180    # Milisegundos antes de activar auto-repetición
+ARR_INTERVAL = 50  # Intervalo entre repeticiones automáticas (ms)
+
 # Función para cargar las configuraciones de teclas
 def load_keybindings():
     """
@@ -122,7 +126,9 @@ def get_default_keybindings():
                 {"button_type": "button", "button": 1, "description": "Botón B/Círculo"}
             ],
             "hold": [
-                {"button_type": "button", "button": 2, "description": "Botón X/Cuadrado"}
+                {"button_type": "button", "button": 2, "description": "Botón X/Cuadrado"},
+                {"button_type": "button", "button": 4, "description": "Botón LB"},
+                {"button_type": "button", "button": 7, "description": "Botón RT"}
             ],
             "pause": [
                 {"button_type": "button", "button": 7, "description": "Start/Options"}
@@ -233,7 +239,7 @@ def check_gamepad_action(action, keybindings=None):
             for i in range(13, 16):  # Prueba algunos índices comunes
                 if i < gamepad.get_numbuttons() and gamepad.get_button(i):
                     # Imprimir para debug: qué botón se presionó
-                    print(f"Botón D-pad detectado: {i}")
+
                     if i == 13 or i == 14:  # Izquierda en varios controladores
                         return True
             
@@ -247,7 +253,6 @@ def check_gamepad_action(action, keybindings=None):
             # Comprobar botón D-pad derecha (índice típico: 14)
             for i in range(13, 16):
                 if i < gamepad.get_numbuttons() and gamepad.get_button(i):
-                    print(f"Botón D-pad detectado: {i}")
                     if i == 14 or i == 15:  # Derecha en varios controladores
                         return True
             
@@ -261,7 +266,6 @@ def check_gamepad_action(action, keybindings=None):
             # Comprobar botón D-pad abajo (índice típico: 12)
             for i in range(11, 14):
                 if i < gamepad.get_numbuttons() and gamepad.get_button(i):
-                    print(f"Botón D-pad detectado: {i}")
                     if i == 12 or i == 11:  # Abajo en varios controladores
                         return True
             
@@ -275,7 +279,7 @@ def check_gamepad_action(action, keybindings=None):
             # Comprobar botón D-pad arriba (índice típico: 11)
             for i in range(10, 13):
                 if i < gamepad.get_numbuttons() and gamepad.get_button(i):
-                    print(f"Botón D-pad detectado: {i}")
+
                     if i == 11 or i == 10:  # Arriba en varios controladores
                         return True
             
@@ -285,24 +289,40 @@ def check_gamepad_action(action, keybindings=None):
                 if hat[1] == 1:  # 1 en Y significa arriba
                     return True
         
-        # Hard drop (botón B - normalmente índice 1, o D-pad arriba)
+        # Hard drop (botón X/Cuadrado - índice 2, o D-pad arriba)
         elif action == "hard_drop":
-            # Check for button-based hard_drop (usually B button)
+            # Check for button-based hard_drop
             for binding in keybindings.get("gamepad", {}).get(action, []):
                 # Button type (standard button press)
                 if binding.get("button_type") == "button":
                     button_idx = binding.get("button")
                     if button_idx is not None and 0 <= button_idx < gamepad.get_numbuttons():
                         if gamepad.get_button(button_idx):
-                            print(f"Hard drop con botón {button_idx}")
+                            # Intentar activar vibración si está disponible
+                            try:
+                                gamepad.rumble(0.7, 0.7, 100)  # Vibración fuerte pero corta
+                            except:
+                                pass  # Ignorar si el control no soporta vibración
                             return True
                 
-                # Axis type (for D-pad on some controllers)
+                # Axis type (for D-pad up on some controllers)
                 elif binding.get("button_type") == "axis" and binding.get("axis") == 1:
                     # Check for D-pad up (negative value on axis 1)
                     axis_val = gamepad.get_axis(1)
-                    if binding.get("value", 0) < 0 and axis_val < -0.5:
-                        print(f"Hard drop con D-pad arriba (axis 1)")
+                    # Implementar un sistema de bloqueo temporal para evitar múltiples activaciones
+                    global _last_hard_drop_time
+                    if not '_last_hard_drop_time' in globals():
+                        _last_hard_drop_time = 0
+                    
+                    current_time = pygame.time.get_ticks()
+                    # Solo permitir hard drop cada 500ms para evitar activaciones múltiples
+                    if binding.get("value", 0) < 0 and axis_val < -0.7 and current_time - _last_hard_drop_time > 500:  
+                        _last_hard_drop_time = current_time
+                        # Intentar activar vibración
+                        try:
+                            gamepad.rumble(0.7, 0.7, 100)
+                        except:
+                            pass
                         return True
                 
                 # Hat type (for D-pad on other controllers)
@@ -311,16 +331,32 @@ def check_gamepad_action(action, keybindings=None):
                     if hat_idx < gamepad.get_numhats():
                         hat_val = gamepad.get_hat(hat_idx)
                         # Check if it matches the up direction (0, 1)
-                        if hat_val[1] == 1:
-                            print(f"Hard drop con D-pad hat up")
+                        if hat_val == (0, 1):  # Comparación exacta para up
+                            # Intentar activar vibración
+                            try:
+                                gamepad.rumble(0.7, 0.7, 100)
+                            except:
+                                pass
                             return True
             
-            # Also check D-pad explicitly for compatibility
+            # Verificación universal de D-pad para máxima compatibilidad
             for i in range(gamepad.get_numhats()):
                 hat = gamepad.get_hat(i)
                 if hat[1] == 1:  # Up direction
-                    print(f"Hard drop con D-pad hat {i} (universal)")
+                    # Intentar activar vibración
+                    try:
+                        gamepad.rumble(0.7, 0.7, 100)
+                    except:
+                        pass
                     return True
+                    
+            # Verificación adicional: button 2 (X/Cuadrado) siempre debe funcionar para hard drop
+            if 2 < gamepad.get_numbuttons() and gamepad.get_button(2):
+                try:
+                    gamepad.rumble(0.7, 0.7, 100)
+                except:
+                    pass
+                return True
 
 
         
@@ -332,18 +368,51 @@ def check_gamepad_action(action, keybindings=None):
                 if button_idx < gamepad.get_numbuttons() and gamepad.get_button(button_idx):
                     return True
             
-            # Comprobar ejes analógicos
+            # Comprobar ejes analógicos con control mejorado para evitar activaciones rápidas
             elif binding["button_type"] == "axis" and "axis" in binding and "value" in binding:
                 axis_idx = binding["axis"]
                 target_value = binding["value"]
+                current_time = pygame.time.get_ticks()
+                
+                # Usar un diccionario global para rastrear tiempos de último uso para cada eje
+                global _axis_last_times
+                if not '_axis_last_times' in globals():
+                    _axis_last_times = {}
+                
+                axis_key = f"{id(gamepad)}_{axis_idx}"
+                
                 if axis_idx < gamepad.get_numaxes():
                     axis_value = gamepad.get_axis(axis_idx)
-                    # Para valores negativos (como izquierda/arriba)
-                    if target_value < 0 and axis_value < target_value:
-                        return True
-                    # Para valores positivos (como derecha/abajo)
-                    elif target_value > 0 and axis_value > target_value:
-                        return True
+                    
+                    # Control para movimiento en menús (menos sensible)
+                    if action.startswith("menu_"):
+                        # Para valores negativos (como izquierda/arriba)
+                        if target_value < 0 and axis_value < -0.7:  # Umbral más alto para menús
+                            # Verificar si ha pasado suficiente tiempo desde la última activación
+                            if axis_key not in _axis_last_times or \
+                               current_time - _axis_last_times[axis_key] > 250:  # Retardo mayor para menús
+                                _axis_last_times[axis_key] = current_time
+                                return True
+                        # Para valores positivos (como derecha/abajo)
+                        elif target_value > 0 and axis_value > 0.7:  # Umbral más alto para menús
+                            if axis_key not in _axis_last_times or \
+                               current_time - _axis_last_times[axis_key] > 250:  # Retardo mayor para menús
+                                _axis_last_times[axis_key] = current_time
+                                return True
+                    else:
+                        # Control para movimiento en juego (más sensible, respuesta más rápida)
+                        # Para valores negativos (como izquierda/arriba)
+                        if target_value < 0 and axis_value < target_value:
+                            if axis_key not in _axis_last_times or \
+                               current_time - _axis_last_times[axis_key] > 100:
+                                _axis_last_times[axis_key] = current_time
+                                return True
+                        # Para valores positivos (como derecha/abajo)
+                        elif target_value > 0 and axis_value > target_value:
+                            if axis_key not in _axis_last_times or \
+                               current_time - _axis_last_times[axis_key] > 100:
+                                _axis_last_times[axis_key] = current_time
+                                return True
     
     return False
 # Obtener estado de un botón/axis específico de un gamepad
@@ -705,11 +774,18 @@ def handle_game_controls(event, game, das_left_pressed, das_right_pressed, das_d
             move_left_keys.append(key_code)
     
     if any(keys[key] for key in move_left_keys):
+        now = pygame.time.get_ticks()
+        # Si no está presionado o si está en modo de auto-repetición
         if not das_left_pressed:
             if game.move_left():
                 sfx_move.play()
             das_left_pressed = True
-            das_left_start = pygame.time.get_ticks()
+            das_left_start = now
+        elif now - das_left_start > DAS_DELAY:
+            # Auto-repetición después del retraso inicial
+            if ((now - das_left_start - DAS_DELAY) // ARR_INTERVAL) > ((now - 20 - das_left_start - DAS_DELAY) // ARR_INTERVAL):
+                if game.move_left():
+                    sfx_move.play()
     else:
         das_left_pressed = False
     
@@ -721,15 +797,22 @@ def handle_game_controls(event, game, das_left_pressed, das_right_pressed, das_d
             move_right_keys.append(key_code)
     
     if any(keys[key] for key in move_right_keys):
+        now = pygame.time.get_ticks()
+        # Si no está presionado o si está en modo de auto-repetición
         if not das_right_pressed:
             if game.move_right():
                 sfx_move.play()
             das_right_pressed = True
-            das_right_start = pygame.time.get_ticks()
+            das_right_start = now
+        elif now - das_right_start > DAS_DELAY:
+            # Auto-repetición después del retraso inicial
+            if ((now - das_right_start - DAS_DELAY) // ARR_INTERVAL) > ((now - 20 - das_right_start - DAS_DELAY) // ARR_INTERVAL):
+                if game.move_right():
+                    sfx_move.play()
     else:
         das_right_pressed = False
-    
-    # Verificar si alguna de las teclas de soft drop está presionada
+        
+    # Verificar también soft drop para procesamiento consistente con las otras teclas
     soft_drop_keys = []
     for binding in keybindings["keyboard"].get("soft_drop", []):
         key_code = key_string_to_pygame_key(binding["key"])
@@ -737,13 +820,24 @@ def handle_game_controls(event, game, das_left_pressed, das_right_pressed, das_d
             soft_drop_keys.append(key_code)
     
     if any(keys[key] for key in soft_drop_keys):
+        now = pygame.time.get_ticks()
+        # Si no está presionado o si está en modo de auto-repetición
         if not das_down_pressed:
             if game.move_down(is_soft_drop=True):
                 sfx_soft_drop.play()
             das_down_pressed = True
-            das_down_start = pygame.time.get_ticks()
+            das_down_start = now
+        elif now - das_down_start > DAS_DELAY:
+            # Auto-repetición después del retraso inicial (más rápida para soft drop)
+            if ((now - das_down_start - DAS_DELAY) // (ARR_INTERVAL // 2)) > ((now - 20 - das_down_start - DAS_DELAY) // (ARR_INTERVAL // 2)):
+                if game.move_down(is_soft_drop=True):
+                    sfx_soft_drop.play()
     else:
         das_down_pressed = False
+    
+    # Esta sección se ha movido y reemplazado por el código actualizado más arriba
+    # que maneja el soft drop de manera consistente con los otros movimientos
+    pass
             
     # Manejar controles de gamepad
     if not paused:
@@ -911,3 +1005,78 @@ def handle_controls_menu(screen, settings):
     # Esta función se implementará en el futuro para permitir configurar controles
     # desde dentro del juego
     pass
+
+# Función para controles de menú general
+def handle_menu_controls(event, selected, menu_items, sfx_cursor, sfx_enter, sfx_back=None):
+    """
+    Maneja los controles para menús generales.
+    
+    Args:
+        event: Evento de pygame
+        selected: Índice de la opción seleccionada actualmente
+        menu_items: Lista de opciones del menú
+        sfx_cursor: Efecto de sonido para navegación
+        sfx_enter: Efecto de sonido para selección
+        sfx_back: Efecto de sonido para retroceso/salida (opcional)
+    
+    Returns:
+        tuple: (nuevo_indice_seleccionado, accion, salir)
+    """
+    action = None
+    exit_flag = False
+    keybindings = load_keybindings()
+    
+    # Manejar controles de teclado
+    if event.type == pygame.KEYDOWN:
+        if is_key_action(event, "menu_up", keybindings):
+            selected = (selected - 1) % len(menu_items)
+            sfx_cursor.play()
+        elif is_key_action(event, "menu_down", keybindings):
+            selected = (selected + 1) % len(menu_items)
+            sfx_cursor.play()
+        elif is_key_action(event, "confirm", keybindings):
+            if len(menu_items) > 0 and selected < len(menu_items):
+                last_item = menu_items[-1]
+                if menu_items[selected] == last_item and last_item in ["Volver", "Salir"]:
+                    if sfx_back:
+                        sfx_back.play()
+                    else:
+                        sfx_enter.play()
+                    exit_flag = True
+                else:
+                    sfx_enter.play()
+                    action = menu_items[selected]
+        elif is_key_action(event, "cancel", keybindings):
+            if sfx_back:
+                sfx_back.play()
+            else:
+                sfx_enter.play()
+            exit_flag = True
+    
+    # Manejar controles de gamepad
+    if check_gamepad_action("menu_up", keybindings):
+        selected = (selected - 1) % len(menu_items)
+        sfx_cursor.play()
+    elif check_gamepad_action("menu_down", keybindings):
+        selected = (selected + 1) % len(menu_items)
+        sfx_cursor.play()
+    elif check_gamepad_action("confirm", keybindings):
+        if len(menu_items) > 0 and selected < len(menu_items):
+            last_item = menu_items[-1]
+            if menu_items[selected] == last_item and last_item in ["Volver", "Salir"]:
+                if sfx_back:
+                    sfx_back.play()
+                else:
+                    sfx_enter.play()
+                exit_flag = True
+            else:
+                sfx_enter.play()
+                action = menu_items[selected]
+    elif check_gamepad_action("cancel", keybindings):
+        if sfx_back:
+            sfx_back.play()
+        else:
+            sfx_enter.play()
+        exit_flag = True
+            
+    return selected, action, exit_flag
