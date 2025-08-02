@@ -289,12 +289,17 @@ def start_game(screen, settings, game_mode='classic'):
                             shake_duration = 30 if game.level_up_event else 25
                             screen_shake.start_shake(shake_intensity, shake_duration)
                             # Add T-spin text animation with proper type
+                            # Verificar si es T-spin mini o normal
+                            mini_suffix = ""
+                            if "tspin_type" in line_clear_result and line_clear_result["tspin_type"] == "T-spin mini":
+                                mini_suffix = " Mini"
+                                
                             tspin_type = "Single"
                             if line_clear_result['count'] == 2:
                                 tspin_type = "Double"
                             elif line_clear_result['count'] == 3:
                                 tspin_type = "Triple"
-                            combo_animator.add_tspin_animation(tspin_type)
+                            combo_animator.add_tspin_animation(f"{tspin_type}{mini_suffix}")
                         
                         # Check for perfect clear (all blocks removed from the field)
                         is_perfect = line_clear_result.get("is_perfect", False)
@@ -348,8 +353,8 @@ def start_game(screen, settings, game_mode='classic'):
                             shake_duration = 30 if game.level_up_event else 25
                             screen_shake.start_shake(shake_intensity, shake_duration)
                             
-                            # Get the spin type
-                            spin_type = line_clear_result.get("spin_type", "T-spin")
+                            # Get the spin type and check for mini
+                            tspin_type = line_clear_result.get("tspin_type", "T-spin")
                             
                             # Add spin text animation with proper type
                             spin_level = "Single"
@@ -359,7 +364,10 @@ def start_game(screen, settings, game_mode='classic'):
                                 spin_level = "Triple"
                                 
                             # Use existing T-spin animation for all spins
-                            combo_animator.add_tspin_animation(f"{spin_type} {spin_level}")
+                            if "mini" in tspin_type.lower():
+                                combo_animator.add_tspin_animation(f"{spin_level} Mini")
+                            else:
+                                combo_animator.add_tspin_animation(f"{spin_level}")
                         
                         # Check for perfect clear (all blocks removed from the field)
                         is_perfect = line_clear_result.get("is_perfect", False)

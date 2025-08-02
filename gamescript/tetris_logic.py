@@ -110,6 +110,11 @@ class TetrisGame:
         self.level_up_event = False
         self.soft_drop_score = 0
         
+        # Variables para el sistema SRS y detección de T-spin
+        self.last_move_was_rotation = False
+        self.last_rotation_kick = (0, 0)
+        self.back_to_back = 0  # Contador para técnicas consecutivas (Tetris y T-spin)
+        
         # Inicializar la bolsa con el algoritmo 7-bag shuffle
         self.refill_bag()
         
@@ -213,21 +218,77 @@ class TetrisGame:
 
         return True
 
+    def get_wall_kicks(self, piece_type, rotation_from, rotation_to):
+        """
+        Implementa el sistema oficial de SRS (Super Rotation System) para wall kicks
+        según la especificación de los Tetris modernos.
+        
+        Referencia: https://harddrop.com/wiki/SRS
+        """
+        # Definir tablas de kick para piezas JLSTZ (todas excepto I y O)
+        JLSTZ_WALL_KICKS = {
+            # (rotación_inicial, rotación_destino): [(test_1_x, test_1_y), (test_2_x, test_2_y), ...]
+            (0, 1): [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)],  # 0->R
+            (1, 0): [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)],    # R->0
+            (1, 2): [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)],    # R->2
+            (2, 1): [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)],  # 2->R
+            (2, 3): [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)],     # 2->L
+            (3, 2): [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)], # L->2
+            (3, 0): [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)], # L->0
+            (0, 3): [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)]      # 0->L
+        }
+        
+        # Definir tabla de kick específica para la pieza I
+        I_WALL_KICKS = {
+            (0, 1): [(0, 0), (-2, 0), (1, 0), (-2, 1), (1, -2)],   # 0->R
+            (1, 0): [(0, 0), (2, 0), (-1, 0), (2, -1), (-1, 2)],   # R->0
+            (1, 2): [(0, 0), (-1, 0), (2, 0), (-1, -2), (2, 1)],   # R->2
+            (2, 1): [(0, 0), (1, 0), (-2, 0), (1, 2), (-2, -1)],   # 2->R
+            (2, 3): [(0, 0), (2, 0), (-1, 0), (2, -1), (-1, 2)],   # 2->L
+            (3, 2): [(0, 0), (-2, 0), (1, 0), (-2, 1), (1, -2)],   # L->2
+            (3, 0): [(0, 0), (1, 0), (-2, 0), (1, 2), (-2, -1)],   # L->0
+            (0, 3): [(0, 0), (-1, 0), (2, 0), (-1, -2), (2, 1)]    # 0->L
+        }
+        
+        # La pieza O no tiene kicks (no rota visiblemente)
+        O_WALL_KICKS = {
+            (0, 1): [(0, 0)],
+            (1, 0): [(0, 0)],
+            (1, 2): [(0, 0)],
+            (2, 1): [(0, 0)],
+            (2, 3): [(0, 0)],
+            (3, 2): [(0, 0)],
+            (3, 0): [(0, 0)],
+            (0, 3): [(0, 0)]
+        }
+        
+        # Seleccionar la tabla correcta según el tipo de pieza
+        if piece_type == 4:  # I-piece (index 4)
+            return I_WALL_KICKS.get((rotation_from, rotation_to), [(0, 0)])
+        elif piece_type == 3:  # O-piece (index 3)
+            return O_WALL_KICKS.get((rotation_from, rotation_to), [(0, 0)])
+        else:  # JLSTZ pieces (todas las demás)
+            return JLSTZ_WALL_KICKS.get((rotation_from, rotation_to), [(0, 0)])
+    
     def rotate(self):
         """
         Clockwise rotation (X key)
-        Follows the pattern: shapes = 1->2->3->4->1
+        Implementa SRS (Super Rotation System) para la rotación en sentido horario.
         """
-        # Clockwise rotation: increment rotation index
+        # No rotar si es game over
+        if self.game_over:
+            return False
+            
+        # Calcular nueva rotación (sentido horario)
         new_rotation = (self.rotation + 1) % 4
         
-        # Use appropriate wall kicks for clockwise rotation
-        kicks = [(0, 0), (-1, 0), (1, 0), (0, -1), (-2, 0), (2, 0)]
+        # Obtener kicks según SRS para esta pieza y rotación
+        kicks = self.get_wall_kicks(self.piece_type, self.rotation, new_rotation)
         
-        # Special kicks for I-piece (long piece)
-        if self.piece_type == 4:  # Index 4 is the I-piece
-            kicks = [(0, 0), (-2, 0), (2, 0), (-1, 0), (1, 0), (0, 1)]
+        # Registrar último estado para detección de T-spin
+        last_x, last_y, last_rot = self.piece_x, self.piece_y, self.rotation
         
+        # Intentar cada posible kick
         for dx, dy in kicks:
             new_x = self.piece_x + dx
             new_y = self.piece_y + dy
@@ -235,29 +296,38 @@ class TetrisGame:
                 self.piece_x = new_x
                 self.piece_y = new_y
                 self.rotation = new_rotation
+                
+                # Si es pieza T, registrar que hubo rotación para detección de T-spin
+                if self.piece_type == 5:  # T-piece
+                    self.last_move_was_rotation = True
+                    # Guardar el tipo de kick para distinguir entre T-spin normal y mini
+                    self.last_rotation_kick = (dx, dy)
+                else:
+                    self.last_move_was_rotation = False
+                
                 return True
+                
         return False
         
     def rotate_inv(self):
-        """Counter-clockwise rotation"""
-        # Counter-clockwise rotation: equivalent to -1 mod 4, but always positive
+        """
+        Counter-clockwise rotation (Z key)
+        Implementa SRS (Super Rotation System) para la rotación en sentido antihorario.
+        """
+        # No rotar si es game over
+        if self.game_over:
+            return False
+            
+        # Calcular nueva rotación (sentido antihorario)
         new_rotation = (self.rotation + 3) % 4
         
-        # Wall kicks for counter-clockwise rotation
-        kicks = [(0, 0), (-1, 0), (1, 0), (0, -1), (-1, -1), (1, -1), (0, 2), (1, 2), (-1, 2)]
+        # Obtener kicks según SRS para esta pieza y rotación
+        kicks = self.get_wall_kicks(self.piece_type, self.rotation, new_rotation)
         
-        # Special kicks for I-piece
-        if self.piece_type == 4:  # I-piece
-            if self.rotation == 0 and new_rotation == 3:
-                kicks = [(0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)]
-            elif self.rotation == 1 and new_rotation == 0:
-                kicks = [(0, 0), (1, 0), (-2, 0), (1, -2), (-2, 1)]
-            elif self.rotation == 2 and new_rotation == 1:
-                kicks = [(0, 0), (2, 0), (-1, 0), (2, 1), (-1, -2)]
-            elif self.rotation == 3 and new_rotation == 2:
-                kicks = [(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)]
-            
-        # Try each possible position with wall kicks
+        # Registrar último estado para detección de T-spin
+        last_x, last_y, last_rot = self.piece_x, self.piece_y, self.rotation
+        
+        # Intentar cada posible kick
         for dx, dy in kicks:
             new_x = self.piece_x + dx
             new_y = self.piece_y + dy
@@ -265,6 +335,15 @@ class TetrisGame:
                 self.piece_x = new_x
                 self.piece_y = new_y
                 self.rotation = new_rotation
+                
+                # Si es pieza T, registrar que hubo rotación para detección de T-spin
+                if self.piece_type == 5:  # T-piece
+                    self.last_move_was_rotation = True
+                    # Guardar el tipo de kick para distinguir entre T-spin normal y mini
+                    self.last_rotation_kick = (dx, dy)
+                else:
+                    self.last_move_was_rotation = False
+                
                 return True
                 
         return False
@@ -272,12 +351,18 @@ class TetrisGame:
     def move_left(self):
         if self.is_valid_position(x=self.piece_x - 1):
             self.piece_x -= 1
+            # Resetear el flag de rotación para T-spin (un movimiento horizontal invalida el T-spin)
+            if self.piece_type == 5:  # T-piece
+                self.last_move_was_rotation = False
             return True
         return False
 
     def move_right(self):
         if self.is_valid_position(x=self.piece_x + 1):
             self.piece_x += 1
+            # Resetear el flag de rotación para T-spin (un movimiento horizontal invalida el T-spin)
+            if self.piece_type == 5:  # T-piece
+                self.last_move_was_rotation = False
             return True
         return False
 
@@ -296,6 +381,10 @@ class TetrisGame:
             self.on_ground = False
             self.lock_timer = 0
             
+            # Resetear el flag de rotación para T-spin (un movimiento vertical invalida el T-spin)
+            if self.piece_type == 5:  # T-piece
+                self.last_move_was_rotation = False
+            
             # Solo incrementar puntuación si es soft drop manual
             if is_soft_drop:
                 self.soft_drop_score += 1
@@ -311,9 +400,25 @@ class TetrisGame:
 
     def drop(self):
         drop_y = self.piece_y
+        drop_distance = 0
+        
+        # Calcular la distancia del hard drop y la posición final
         while self.is_valid_position(y=drop_y + 1):
             drop_y += 1
+            drop_distance += 1
+        
         self.piece_y = drop_y
+        
+        # Añadir puntuación por hard drop (2 puntos por cada celda que cae)
+        hard_drop_score = drop_distance * 2
+        self.score += hard_drop_score
+        
+        # Resetear el flag de rotación para T-spin (hard drop invalida el T-spin)
+        if self.piece_type == 5:  # T-piece
+            self.last_move_was_rotation = False
+            
+        # Devolver la distancia caída para posibles efectos visuales
+        return drop_distance
 
     def hold_piece(self):
         """
@@ -372,11 +477,22 @@ class TetrisGame:
 
     def is_tspin(self):
         """
-        Detecta si la última rotación resultó en un T-spin.
-        Un T-spin ocurre cuando una pieza T es rotada y tiene 3 de sus 4 esquinas bloqueadas.
+        Detecta si la última rotación resultó en un T-spin según las reglas modernas de SRS.
+        
+        En el sistema moderno:
+        - Un T-spin ocurre cuando la última acción fue una rotación de la pieza T
+          Y al menos 3 de las 4 esquinas alrededor del centro de la T están ocupadas
+        - Se distingue entre T-spin normal y T-spin mini según el tipo de rotación
+          y la posición final de los bloques
+          
+        Referencia: https://harddrop.com/wiki/List_of_twists#Twists_with_T_.28or_T-Spin.29
         """
         # Solo aplica a la pieza T (índice 5 en SHAPES)
         if self.piece_type != 5:
+            return False
+        
+        # Verificar si la última acción fue una rotación (requisito de SRS moderno)
+        if not hasattr(self, 'last_move_was_rotation') or not self.last_move_was_rotation:
             return False
         
         # Verificar las 4 esquinas alrededor de la pieza T
@@ -389,19 +505,67 @@ class TetrisGame:
             (self.piece_x + 2, self.piece_y + 2)        # Inferior derecha
         ]
         
-        for x, y in corners:
+        front_corners = []
+        
+        # Determinar cuáles son las esquinas frontales según la rotación actual
+        if self.rotation == 0:  # T apuntando hacia arriba
+            front_corners = [corners[0], corners[1]]  # Esquinas superiores
+        elif self.rotation == 1:  # T apuntando hacia la derecha
+            front_corners = [corners[1], corners[3]]  # Esquinas derechas
+        elif self.rotation == 2:  # T apuntando hacia abajo
+            front_corners = [corners[2], corners[3]]  # Esquinas inferiores
+        elif self.rotation == 3:  # T apuntando hacia la izquierda
+            front_corners = [corners[0], corners[2]]  # Esquinas izquierdas
+        
+        # Contar esquinas bloqueadas y esquinas frontales bloqueadas
+        front_blocked = 0
+        for i, (x, y) in enumerate(corners):
+            is_blocked = False
+            
             # Verificar si la esquina está bloqueada (fuera del campo o con un bloque)
             if x < 0 or x >= self.width or y < 0 or y >= self.height:
                 corners_blocked += 1
+                is_blocked = True
             elif self.field[y][x] != 0:
                 corners_blocked += 1
+                is_blocked = True
+            
+            # Verificar si es una esquina frontal bloqueada
+            if is_blocked and (x, y) in front_corners:
+                front_blocked += 1
         
-        # Un T-spin requiere al menos 3 esquinas bloqueadas
-        return corners_blocked >= 3
+        # Determinar el tipo de T-spin
+        # Según SRS moderno:
+        # - T-spin normal: 3 o 4 esquinas bloqueadas con al menos 2 frontales bloqueadas
+        # - T-spin mini: 3 esquinas bloqueadas pero menos de 2 frontales bloqueadas
+        if corners_blocked >= 3:
+            # Verificar si el último kick fue un test 4 o 5 (típicamente kicks especiales)
+            # que pueden convertir un mini T-spin en un T-spin completo
+            if hasattr(self, 'last_rotation_kick') and self.last_rotation_kick != (0, 0):
+                # Si el kick no fue (0,0) y es el último test, considerarlo T-spin completo
+                kick_index = 0
+                if hasattr(self, 'last_rotation_kick'):
+                    kicks = self.get_wall_kicks(5, (self.rotation-1)%4, self.rotation)
+                    if self.last_rotation_kick in kicks:
+                        kick_index = kicks.index(self.last_rotation_kick)
+                
+                # Verificar si es un T-spin mini o completo
+                if front_blocked >= 2 or kick_index >= 3:
+                    return "T-spin"
+                else:
+                    return "T-spin mini"
+            else:
+                # Sin kick especial, usar la regla estándar de esquinas frontales
+                if front_blocked >= 2:
+                    return "T-spin"
+                else:
+                    return "T-spin mini"
+        
+        return False
 
     def fix_piece(self):
         # Verificar T-spin antes de fijar la pieza
-        is_tspin = self.is_tspin()
+        tspin_result = self.is_tspin()
         
         shape = SHAPES[self.piece_type][self.rotation]
         for row in range(len(shape)):
@@ -419,24 +583,54 @@ class TetrisGame:
         self.hold_used = False
         
         # Agregar información de T-spin al resultado si es aplicable
-        if line_clear_result and is_tspin:
+        if line_clear_result and tspin_result:
+            # Determinar el tipo exacto de T-spin para calcular la puntuación
+            tspin_type = tspin_result  # "T-spin" o "T-spin mini"
             line_clear_result["is_tspin"] = True
-            # Puntos base para líneas eliminadas
-            points_table = {1: 40, 2: 100, 3: 300, 4: 1200}
-            # Duplicar la puntuación por T-spin
-            self.score += points_table.get(line_clear_result["count"], 0) * self.level
-            debugger.debug(f"¡T-SPIN detectado! Puntuación adicional otorgada.")
-        elif is_tspin:
-            # T-spin sin líneas, dar puntos adicionales
-            self.score += 400 * self.level
-            debugger.debug(f"¡T-SPIN sin líneas detectado! 400 puntos × nivel {self.level}")
+            line_clear_result["tspin_type"] = tspin_type
+            
+            # Puntuación para T-spins según el sistema moderno
+            if tspin_type == "T-spin":
+                # T-spin normal
+                points_table = {
+                    0: 400,    # T-spin sin líneas
+                    1: 800,    # T-spin Single
+                    2: 1200,   # T-spin Double
+                    3: 1600    # T-spin Triple
+                }
+            else:
+                # T-spin mini
+                points_table = {
+                    0: 200,    # T-spin mini sin líneas
+                    1: 200,    # T-spin mini Single
+                    2: 400,    # T-spin mini Double
+                    3: 400     # T-spin mini Triple (raro, pero posible)
+                }
+            
+            # Aplicar puntuación según el tipo de T-spin y líneas eliminadas
+            points = points_table.get(line_clear_result.get("count", 0), 0) * self.level
+            self.score += points
+            
+            # Registrar en el log el tipo específico de T-spin
+            lines_str = f"{line_clear_result.get('count', 0)} línea(s)" if line_clear_result.get("count", 0) > 0 else "sin líneas"
+            debugger.debug(f"¡{tspin_type} {lines_str} detectado! {points} puntos otorgados (nivel {self.level}).")
+        elif tspin_result:
+            # T-spin sin líneas
+            if tspin_result == "T-spin":
+                points = 400 * self.level
+            else:  # T-spin mini
+                points = 200 * self.level
+                
+            self.score += points
+            debugger.debug(f"¡{tspin_result} sin líneas detectado! {points} puntos × nivel {self.level}")
 
+        # Resetear flag de rotación después de fijar la pieza
+        self.last_move_was_rotation = False
+        
         # Generar nueva pieza solo cuando no hay animación de eliminación de líneas
-        # Esto evita que se cambie la cola de piezas durante la animación de eliminación
         if not self.lines_to_clear:  # Si no hay líneas para eliminar, generamos una nueva pieza inmediatamente
             self.new_piece()
-        # Si hay líneas para eliminar, la nueva pieza se generará después de la animación en clear_lines
-
+        
         return line_clear_result
 
     def clear_lines(self):
