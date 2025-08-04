@@ -1,6 +1,0 @@
-=== PyTris Debug Log ===
-Started at: 2025-07-24 09:51:34
-
-[09:51:36] DEBUG: Generating background for level 1
-[09:51:36] DEBUG: Background base color: hue=30, sat=60, val=25
-[09:51:36] DEBUG: Adding 5 background tetrominos
