@@ -1,4 +1,5 @@
 # Pytris Geometric Harmony
+![Front cover](./pytris_cover.jpg)
 ## La Leyenda de la Armonía Perdida
 
 ### Prólogo: El Reino de la Geometría Perfecta
