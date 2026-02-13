@@ -26,8 +26,14 @@
         "description": "Flecha arriba"
       },
       {
-        "key": "K_w",
-        "description": "Tecla W"
+        "key": "K_x",
+        "description": "Tecla X"
+      }
+    ],
+    "rotate_inv": [
+      {
+        "key": "K_z",
+        "description": "Tecla Z"
       }
     ],
     "soft_drop": [
@@ -123,11 +129,13 @@
         "button_type": "button",
         "button": 0,
         "description": "Botón A/Cruz"
-      },
+      }
+    ],
+    "rotate_inv": [
       {
         "button_type": "button",
-        "button": 3,
-        "description": "Botón Y/Triángulo"
+        "button": 1,
+        "description": "Botón B/Círculo"
       }
     ],
     "soft_drop": [
@@ -141,8 +149,8 @@
     "hard_drop": [
       {
         "button_type": "button",
-        "button": 1,
-        "description": "Botón B/Círculo"
+        "button": 2,
+        "description": "Botón X/Cuadrado"
       },
       {
         "button_type": "axis",
@@ -160,8 +168,13 @@
     "hold": [
       {
         "button_type": "button",
-        "button": 2,
-        "description": "Botón X/Cuadrado"
+        "button": 5,
+        "description": "Botón RB/R1"
+      },
+      {
+        "button_type": "button",
+        "button": 4,
+        "description": "Botón LB/L1"
       }
     ],
     "pause": [
